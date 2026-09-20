@@ -1,10 +1,10 @@
 # 0.16 (2026-09-09)
 
 - Fixes
-  - Added to dummy options:
+  - Added to dummy options for compatibility with latest nixpkgs-unstable:
     `nix.enable`
     `nix.daemon.enable`
-  - Fixed tests bugs. All tests pass
+  - Fixed tests bugs. All tests pass.
   - Shellcheck cleanup on all bash scripts
   - Format README.md
 
