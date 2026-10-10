@@ -116,6 +116,10 @@
           in
           pkgs.stdenv.mkDerivation {
             name = "shell";
+            nativeBuildInputs = [
+              pkgs.just
+              pkgs.python3
+            ];
 
             shellHook = ''
               PATH="${path}''${PATH:+:}$PATH"
@@ -234,7 +238,17 @@
           '';
 
           updateReadme = pkgs.writers.writeBash "update-readme" ''
-            exec ${pkgs.ruby}/bin/ruby ./util/update-readme.rb
+            exec ${pkgs.python3}/bin/python3 ./util/readme.py update-usage
+          '';
+
+          testReadme = pkgs.writers.writeBash "test-readme" ''
+            export PATH=${
+              lib.makeBinPath [
+                pkgs.python3
+                pkgs.curl
+              ]
+            }:$PATH
+            exec bash ./util/test-readme.sh "$@"
           '';
         };
 
@@ -254,6 +268,11 @@
           updateReadme = {
             type = "app";
             program = toString packages.updateReadme;
+          };
+
+          testReadme = {
+            type = "app";
+            program = toString packages.testReadme;
           };
         };
 

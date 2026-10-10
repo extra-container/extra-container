@@ -1,6 +1,8 @@
 # Unreleased
 
 - updated urls to github.com/extra-container/extra-container
+- removed use of ruby, replaced with bash & python
+- replaced Makefile with justfile
 
 # 0.16 (2026-09-09)
 

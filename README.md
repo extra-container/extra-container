@@ -357,13 +357,24 @@ All contributions and suggestions are welcome, even if they're minor or cosmetic
 Run `nix develop` in the project root directory to start a development shell.\
 Within the shell, you can run extra-container from the [local source](./extra-container) via command `extra-container`.
 
-When changing the `Usage` documentation in `extra-container`, run `make doc` to copy
+When changing the `Usage` documentation in `extra-container`, run `just doc` to copy
 these changes to `README.md`.
+
+Run `just testReadme` (or `nix run .#testReadme`) to extract and run the first
+Bash block under `## Example`. This needs sudo and a systemd host with Nix;
+it checks the HTTP response and container status, and cleans up after failures.
+It refuses to run if a container named `demo` already exists.
+Run `nix run .#testReadme -- --extract` to print the example without running it.
 
 #### Tests
 
-Run `make` to run the tests.\
+Run `just` to run the tests.\
 The following tests are executed:
+
+- Utility tests
+
+  Run `just testUtilities` to check the sudoers and README helpers without root.
+  Requires Python 3 and Bash.
 
 - Main test suite
 

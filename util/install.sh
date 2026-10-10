@@ -36,15 +36,15 @@ nix-build --out-link "$tmpDir/extra-container" -E "(import <nixpkgs> {}).callPac
 sudo "$(type -P nix-env)" -i "$tmpDir/extra-container"
 
 ## 3. Edit /etc/sudoers to enable running extra-container via sudo
-# See ./edit-sudoers.rb for more details
-if ! type -P ruby > /dev/null; then
-    nix-build --out-link "$tmpDir/ruby" '<nixpkgs>' -A ruby > /dev/null
-    export PATH="$tmpDir/ruby/bin${PATH:+:}$PATH"
+# See ./generate-sudoers.py for more details
+if ! type -P python3 > /dev/null; then
+    nix-build --out-link "$tmpDir/python" '<nixpkgs>' -A python3 > /dev/null
+    export PATH="$tmpDir/python/bin${PATH:+:}$PATH"
 fi
 
 extraSecurePaths=/root/.nix-profile/bin:/nix/var/nix/profiles/default/bin
 
-newSudoersContent=$(sudo cat /etc/sudoers | ruby "$scriptDir"/generate-sudoers.rb "$extraSecurePaths")
+newSudoersContent=$(sudo cat /etc/sudoers | python3 "$scriptDir"/generate-sudoers.py "$extraSecurePaths")
 if [[ $newSudoersContent ]]; then
     echo "$newSudoersContent" | sudo EDITOR="tee" visudo >/dev/null
 fi
