@@ -60,7 +60,7 @@
                     #!/usr/bin/env bash
                     if ! type -p extra-container >/dev/null; then
                       >&2 echo "Error: extra-container is not installed"
-                      >&2 echo "Docs: https://github.com/erikarvstedt/extra-container?tab=readme-ov-file#install"
+                      >&2 echo "Docs: https://github.com/extra-container/extra-container?tab=readme-ov-file#install"
                       exit 1
                     fi
                     EXTRA_CONTAINER_ETC=%s exec extra-container "$@"

@@ -1,6 +1,6 @@
 # See how this flake is used in ./usage.sh
 {
-  inputs.extra-container.url = "github:erikarvstedt/extra-container";
+  inputs.extra-container.url = "github:extra-container/extra-container";
   inputs.nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
   outputs =

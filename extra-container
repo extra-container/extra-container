@@ -741,7 +741,7 @@ checkInstallationSuccess() {
             errEcho 'to enable dynamically installing systemd units:'
             errEcho 'boot.extraSystemdUnitPaths = [ "/etc/systemd-mutable/system" ];'
             errEcho
-            errEcho 'See also: https://github.com/erikarvstedt/extra-container/#install'
+            errEcho 'See also: https://github.com/extra-container/extra-container/#install'
             exit 1
         fi
     fi

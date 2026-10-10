@@ -1,14 +1,12 @@
 # extra-container
 
-Manage declarative NixOS containers like imperative containers, without system
-rebuilds.
+NixOS containers that can be fully managed without system rebuilds.
 
-Each declarative container adds a full system module evaluation to every NixOS rebuild,
-which can be prohibitively slow for systems with many containers or when experimenting
-with single containers.
+Standard NixOS declarative containers require a full system module evaluation, which can be prohibitively slow for systems with many containers or for iterative development or experimentation on a running system.
 
-On the other hand, the faster imperative containers lack the full range of options of declarative containers.
-This tool brings you the best of both worlds.
+extra-container retains the benefits of NixOS containers: declarative syntax, package/file/uid/network isolation, resource management, a read-only nix store shared with the host, and fast startup times comparable to docker or qemu vms; but unlike standard NixOS containers, they can be created, stopped, and rebuilt, without a nixos-rebuild.
+
+> This repo is the successor to [erikarvstedt's](https://github.com/erikarvstedt/extra-container) original and [stevelr's](https://github.com/stevelr/extra-container) fork. `erikarvstedt` created extra-container in 2018, and maintained it through 0.14 in Dec 2025. `stevelr` created a fork in May 2026 and moved it here in Oct 2026. The 0.16 tagged release here has the same bits as the 0.16 tag in [stevelr's repo](https://gitthub.com/stevelr/extra-container).
 
 ## Example
 
@@ -79,7 +77,7 @@ Import `extra-container.nixosModules.default` in your configuration.
 ### On other systemd-based Linux distros
 
 ```bash
-git clone https://github.com/erikarvstedt/extra-container
+git clone https://github.com/extra-container/extra-container
 # Calls sudo during install
 extra-container/util/install.sh
 ```
