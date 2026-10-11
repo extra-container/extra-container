@@ -6,6 +6,10 @@ Standard NixOS declarative containers require a full system module evaluation, w
 
 extra-container retains the benefits of NixOS containers: declarative syntax, package/file/uid/network isolation, resource management, a read-only nix store shared with the host, and fast startup times comparable to docker or qemu vms; but unlike standard NixOS containers, they can be created, stopped, and rebuilt, without a nixos-rebuild.
 
+- [Simple flake example](./examples/flake) a simple flake example.
+- [Agent development sandbox](./examples/agent): control access granted to agents or other partially-trusted code.
+- [WireGuard VPN container](./examples/vpn): split-tunnel networking: everything in the container routes over the vpn, while the host retains its original routes.
+
 > This repo is the successor to [erikarvstedt's](https://github.com/erikarvstedt/extra-container) original and [stevelr's](https://github.com/stevelr/extra-container) fork. `erikarvstedt` created extra-container in 2018, and maintained it through 0.14 in Dec 2025. `stevelr` created a fork in May 2026 and moved it here in Oct 2026. The 0.16 tagged release has the same bits as the 0.16 tag in [stevelr's repo](https://github.com/stevelr/extra-container).
 
 ## Example
@@ -214,12 +218,6 @@ or via stdin to access the working directory.
 ```bash
 extra-container create -E '{ imports = [ <pwd/myfile.nix> ]; ... }'
 ```
-
-## Define containers via Flakes
-
-- [Simple flake example](./examples/flake) a simple flake example.
-- [Agent development sandbox](./examples/agent): mount project folders in a sandbox, install dev tools, claude and codex cli, and an SSH server. Network with either veth or shared bridge.
-- [WireGuard VPN container](./examples/vpn): container networking routed over wireguard vpn using host-defined network namespace.
 
 ## Usage
 

@@ -1,10 +1,10 @@
 # WireGuard VPN container
 
-This example creates an extra-container whose outbound network connections go through a wireguard vpn. The host creates a network namespace, a veth pair for SSH, and a WireGuard interface, and the container joins that namespace. If the wireguard connection is not active, no process on the container can make outbound network connections, even to the host.
+This example creates an extra-container whose outbound network connections go through a wireguard vpn. The host creates a network namespace, a veth pair for SSH, and a WireGuard interface, and the container joins that namespace. If the wireguard connection is not active, no process on the container can make outbound network connections, even to the host. Split tunnelling is intrinsic: the host retains its original network routes, and multiple containers can run with different wireguard endpoints.
 
 The `wgnet` module must first be enabled on the host. The module runs a service, `wgnet-vpn.service`, which creates the `nsVpn` namespace required by the container. Its options (`services.wgnet.*`) default to the values in `wgnet-settings.nix`, which the container flake reads too; the simplest way to customize is to edit that file so host and container stay in sync.
 
-WireGuard is created in the host namespace and moved into the container's namespace. Its encrypted UDP socket keeps using the host's network, while the container's default route uses `wg0`. The host can SSH to `10.251.1.1` through the dedicated veth pair (`10.251.1.0/31` on the host).
+WireGuard is started in the host namespace and moved into the container's namespace. Its encrypted UDP socket keeps using the host's network, while the container's default route uses `wg0`. The host can SSH to `10.251.1.1` through the dedicated veth pair (`10.251.1.0/31` on the host).
 
 ## Host setup
 
