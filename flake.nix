@@ -1,7 +1,7 @@
 {
   description = "Run declarative NixOS containers without full system rebuilds";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs =
@@ -13,7 +13,6 @@
     let
       supportedSystems = [
         "x86_64-linux"
-        "i686-linux"
         "aarch64-linux"
       ];
       eachSupportedSystem = flake-utils.lib.eachSystem supportedSystems;
@@ -26,10 +25,6 @@
           environment.systemPackages = [ (pkg pkgs) ];
           boot.extraSystemdUnitPaths = [ "/etc/systemd-mutable/system" ];
         };
-      nixosModules.examples.wgnet = { ... }: {
-        imports = [ ./examples/vpn/wgnet.nix ];
-      };
-
       overlays.default = final: prev: { extra-container = pkg final; };
 
       lib = {
@@ -173,8 +168,7 @@
               output = machine.succeed(
                 f"extra-container shell -E '{config}' --run c cat /etc/testFile"
               )
-              if not "testSuccess" in output:
-                print(f"Test failed. Output:\n{output}")
+              assert "testSuccess" in output, f"Test failed. Output:\n{output}"
             '';
           };
 
@@ -260,22 +254,26 @@
           vm = {
             type = "app";
             program = toString packages.runVM;
+            meta.description = "Run a NixOS VM with extra-container installed";
           };
 
           # Run a Python test driver shell inside the test VM
           debugTest = {
             type = "app";
             program = toString packages.debugTest;
+            meta.description = "Start a Python test driver shell inside the test VM";
           };
 
           updateReadme = {
             type = "app";
             program = toString packages.updateReadme;
+            meta.description = "Copy the extra-container usage text into README.md";
           };
 
           testReadme = {
             type = "app";
             program = toString packages.testReadme;
+            meta.description = "Run the README example end to end (needs sudo)";
           };
         };
 

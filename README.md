@@ -6,7 +6,7 @@ Standard NixOS declarative containers require a full system module evaluation, w
 
 extra-container retains the benefits of NixOS containers: declarative syntax, package/file/uid/network isolation, resource management, a read-only nix store shared with the host, and fast startup times comparable to docker or qemu vms; but unlike standard NixOS containers, they can be created, stopped, and rebuilt, without a nixos-rebuild.
 
-> This repo is the successor to [erikarvstedt's](https://github.com/erikarvstedt/extra-container) original and [stevelr's](https://github.com/stevelr/extra-container) fork. `erikarvstedt` created extra-container in 2018, and maintained it through 0.14 in Dec 2025. `stevelr` created a fork in May 2026 and moved it here in Oct 2026. The 0.16 tagged release here has the same bits as the 0.16 tag in [stevelr's repo](https://gitthub.com/stevelr/extra-container).
+> This repo is the successor to [erikarvstedt's](https://github.com/erikarvstedt/extra-container) original and [stevelr's](https://github.com/stevelr/extra-container) fork. `erikarvstedt` created extra-container in 2018, and maintained it through 0.14 in Dec 2025. `stevelr` created a fork in May 2026 and moved it here in Oct 2026. The 0.16 tagged release has the same bits as the 0.16 tag in [stevelr's repo](https://github.com/stevelr/extra-container).
 
 ## Example
 
@@ -66,13 +66,22 @@ extra-container shell -E "$cfg" --run c hostname # => hello
 
 ### On NixOS
 
-##### NixOS ≥ 21.11
+#### With flakes (recommended)
 
-Add `programs.extra-container.enable = true` to your configuration.
+Add this repository as a flake input and import `extra-container.nixosModules.default`.
+This will install the `extra-container` binary.
 
-##### Any NixOS with `flake` support
+Alternatively, add `extra-container.overlays.default` to `nixpkgs.overlays` and set
+`programs.extra-container.enable = true`.
 
-Import `extra-container.nixosModules.default` in your configuration.
+#### With the nixpkgs module only
+
+Add `programs.extra-container.enable = true` to your configuration (NixOS ≥ 21.11).
+
+Note: as of nixos-25.11 and nixos-unstable, the `extra-container` package in nixpkgs is still
+0.14 from the previous upstream repository. It lacks the compatibility fixes from 0.15 and later
+and may fail to evaluate containers against recent nixpkgs. Use the flake module or overlay
+above until nixpkgs is updated.
 
 ### On other systemd-based Linux distros
 
@@ -92,7 +101,7 @@ and edits `/etc/sudoers` to enable running `extra-container` with sudo.
 Command `shell` starts a container shell session.
 The shell provides helper functions for interacting with the container. The container is destroyed when exiting the shell.
 
-This config uses `extra` options that are [explained below](#private-network-helper).
+This config uses `extra` options [explained below](#private-network-helper).
 
 ```bash
 read -d '' src <<'EOF' || :
@@ -208,14 +217,9 @@ extra-container create -E '{ imports = [ <pwd/myfile.nix> ]; ... }'
 
 ## Define containers via Flakes
 
-See [examples/flake](./examples/flake).
-
-More complete examples:
-
-- [Agent development sandbox](./examples/agent): selected project mounts, Codex,
-  Claude, zsh, and start-on-demand SSH; includes veth and shared bridge setup.
-- [WireGuard VPN container](./examples/vpn): hotel's network namespace design,
-  a host-side WireGuard module, and start-on-demand SSH.
+- [Simple flake example](./examples/flake) a simple flake example.
+- [Agent development sandbox](./examples/agent): mount project folders in a sandbox, install dev tools, claude and codex cli, and an SSH server. Network with either veth or shared bridge.
+- [WireGuard VPN container](./examples/vpn): container networking routed over wireguard vpn using host-defined network namespace.
 
 ## Usage
 
@@ -254,7 +258,8 @@ extra-container create <container-config-file>
 
     --ssh
       Generate SSH keys in /tmp and enable container SSH access.
-      The key files remain after exit and are reused on subsequent runs.
+      The key files remain after exit and are reused on subsequent runs
+      until /tmp is cleared (e.g. on reboot).
       Unlocks the function 'cssh' in 'extra-container shell'.
       Requires container option 'privateNetwork = true'.
 
@@ -375,7 +380,7 @@ Run `nix run .#testReadme -- --extract` to print the example without running it.
 
 #### Tests
 
-Run `just` to run the tests.\
+Run `just test` to run the tests.\
 The following tests are executed:
 
 - Utility tests
@@ -395,7 +400,7 @@ The following tests are executed:
 - VM test
 
   Can be run manually via `nix build .#test`.\
-  This is a basic test using the [NixOS VM test framework](https://github.com/NixOS/nixpkgs/blob/master/nixos/lib/testing-python.nix).
+  This is a basic test using the [NixOS VM test framework](https://github.com/NixOS/nixpkgs/blob/main/nixos/lib/testing-python.nix).
   It is built as a Nix derivation, which makes it independent from the system
   environment.
 
@@ -405,6 +410,26 @@ The following tests are executed:
 - `nix flake check`
 
   Evaluates all flake outputs and builds the VM test.
+
+#### Testing against other nixpkgs versions
+
+`eval-config.nix` evaluates containers with a reduced NixOS module set and stub options for
+everything that set reads. Changes in nixpkgs regularly add new references, which breaks
+evaluation with "option does not exist". These recipes check compatibility without root or
+a build, taking a branch name, a commit hash, or a full flake ref:
+
+```bash
+just evalWith nixos-unstable      # evaluate util/test-containers.nix
+just checkWith nixos-26.05        # nix flake check --no-build with --override-input
+just examplesWith nixos-unstable  # evaluate the examples against this checkout
+just compatWith nixos-unstable    # all three
+just matrix                       # compatWith for every branch in `branches`
+just vmTestWith nixos-unstable    # build and run the VM test (needs KVM, slow)
+```
+
+`just evalWith <commit>` with `git bisect` over nixpkgs finds the exact change that broke
+evaluation. [`compat.yml`](.github/workflows/compat.yml) runs `compatWith` for each branch
+weekly and on pushes that touch evaluation, and the VM test on the weekly run.
 
 #### VM
 

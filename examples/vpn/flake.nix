@@ -38,6 +38,11 @@
                 message = "Use just start, or set CONTAINER_SSH_KEY with --impure.";
               }
             ];
+            # Do not start the container before the host has created the namespace.
+            systemd.services."container@vpn" = {
+              requires = [ "wgnet-vpn.service" ];
+              after = [ "wgnet-vpn.service" ];
+            };
             containers.vpn = {
               privateNetwork = false;
               networkNamespace = "/run/netns/${network.namespace}";

@@ -1,0 +1,4 @@
+result
+result-*
+.ruff_cache/
+__pycache__/

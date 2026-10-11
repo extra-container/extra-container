@@ -7,7 +7,7 @@ _address := "10.251.0.2"
 
 _default:
     just --list
-    
+
 _key:
     @mkdir -p "{{ _state }}"
     @chmod 700 "{{ _state }}"

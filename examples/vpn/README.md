@@ -2,7 +2,7 @@
 
 This example creates an extra-container whose outbound network connections go through a wireguard vpn. The host creates a network namespace, a veth pair for SSH, and a WireGuard interface, and the container joins that namespace. If the wireguard connection is not active, no process on the container can make outbound network connections, even to the host.
 
-The `wgnet` module must first be configured on the host. The module runs a service, wgnet-vpn.service, which creates the 'nsVpn' namespace required by the container. There are no enable flags or declared options: adjust settings in `wgnet-settings.nix`.
+The `wgnet` module must first be enabled on the host. The module runs a service, `wgnet-vpn.service`, which creates the `nsVpn` namespace required by the container. Its options (`services.wgnet.*`) default to the values in `wgnet-settings.nix`, which the container flake reads too; the simplest way to customize is to edit that file so host and container stay in sync.
 
 WireGuard is created in the host namespace and moved into the container's namespace. Its encrypted UDP socket keeps using the host's network, while the container's default route uses `wg0`. The host can SSH to `10.251.1.1` through the dedicated veth pair (`10.251.1.0/31` on the host).
 
@@ -14,9 +14,15 @@ Use a NixOS host with extra-container enabled as described in the repository REA
 imports = [ /absolute/path/to/extra-container/examples/vpn/wgnet.nix ];
 ```
 
-or by importing this example as a flake input and importing its `nixosModules.wgnet`. Customize settings in wgnet-settings.nix.
+or by importing this example as a flake input and importing its `nixosModules.wgnet`. Then enable it:
 
-Create `/etc/extra-container/vpn/wg.conf` on the host, owned by root with mode `0600`. Keep this file outside the repository and the Nix store since it contains a private vpn access key. It is read at service startup using `wg setconf`, and is in accessible from inside the container.
+```nix
+services.wgnet.enable = true;
+```
+
+Customize settings in `wgnet-settings.nix`, or override individual `services.wgnet.*` options on the host (namespace, veth addresses, tunnel address, config file path). If you override the namespace or `localAddress` on the host, change `wgnet-settings.nix` and the justfile's `_address` to match.
+
+Create `/etc/extra-container/vpn/wg.conf` on the host, owned by root with mode `0600`. Keep this file outside the repository and the Nix store since it contains a private vpn access key. It is read at service startup using `wg setconf`, and is inaccessible from inside the container.
 
 ```ini
 [Interface]

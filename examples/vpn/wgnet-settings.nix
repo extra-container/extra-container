@@ -1,4 +1,4 @@
-# wgvpn-vpn settings
+# Defaults for the services.wgnet host module; also read by flake.nix for the container.
 {
   namespace = "nsVpn";
   hostInterface = "ve-nsVpn";

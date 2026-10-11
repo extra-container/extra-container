@@ -14,7 +14,7 @@ _key:
 
 # Start the host namespace, then create, start or update the container.
 start: _key
-    sudo systemctl start wgvpn-vpn.service
+    sudo systemctl start wgnet-vpn.service
     CONTAINER_SSH_KEY="$(ssh-keygen -y -f '{{ _identity }}')" nix run --impure . -- create --start --restart-changed
 
 # Connect, starting the container first if necessary.
@@ -30,5 +30,5 @@ stop:
 
 destroy:
     extra-container destroy vpn
-    sudo systemctl stop wgvpn-vpn.service
+    sudo systemctl stop wgnet-vpn.service
     @if test -f "{{ _state }}/known_hosts"; then ssh-keygen -R "{{ _address }}" -f "{{ _state }}/known_hosts"; fi

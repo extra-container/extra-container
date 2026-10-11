@@ -2,7 +2,7 @@
 
 This flake creates a NixOS extra-container with a handful of development tools, and selected read/write project folder mounts. You can customize network, firewall, and disk mounts to manage access of the processes inside.
 
-Think of the container a lightweight and ephemeral: easy to destroy, reconfigure, and restart. A user inside the container (by default, "user") has a unique home directory, limited tools, and a list of project folders to mount from the linux host.
+Think of the container as lightweight and ephemeral: easy to destroy, reconfigure, and restart. A user inside the container (by default, "user") has a unique home directory, limited tools, and a list of project folders to mount from the linux host.
 
 ## Start and connect
 

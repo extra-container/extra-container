@@ -1,19 +1,32 @@
-# Unreleased
+# 0.17
 
-- updated urls to github.com/extra-container/extra-container
-- new examples:
-  - ./examples/agent - development sandbox for agent development
-  - ./examples/vpn - container with wireguard vpn
-- removed use of ruby, replaced with bash & python
-- replaced Makefile with justfile
+- Project moved to [github.com/extra-container/extra-container](https://github.com/extra-container/extra-container)
+- Enhancements
+  - Support NixOS 26.05 and nixos-unstable
+  - New examples:
+    - [examples/agent](./examples/agent): development sandbox for agent development
+    - [examples/vpn](./examples/vpn): container whose traffic goes through a WireGuard VPN;
+      uses a reusable `services.wgnet` host module.
+  - Add CI (flake check, nixfmt, shellcheck, utility tests, example evaluation)
+- Fixes
+  - `assertions` and `warnings` are now checked when building containers.
+    Previously they were silently ignored, because NixOS only checks them when
+    building `system.build.toplevel`, which extra-container does not use.
+  - The VM test (`nix flake check`) now fails when the container test fails
+- Development
+  - Removed use of ruby, replaced with bash & python
+  - Replaced Makefile with justfile
+  - Dropped `i686-linux` from `supportedSystems`
+  - Add `just evalWith|checkWith|examplesWith|compatWith|matrix|vmTestWith` and a weekly CI
+    job for checking compatibility with other nixpkgs versions
 
 # 0.16 (2026-09-09)
 
 - Fixes
-  - Added to dummy options for compatibility with latest nixpkgs-unstable:
+  - Added two dummy options for compatibility with latest nixpkgs-unstable:
     `nix.enable`
     `nix.daemon.enable`
-  - Fixed tests bugs. All tests pass.
+  - Fixed test bugs. All tests pass.
   - Shellcheck cleanup on all bash scripts
   - Format README.md
 

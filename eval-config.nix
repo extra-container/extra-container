@@ -92,6 +92,8 @@ let
         systemd.oomd = dummy;
         systemd.user.generators = optionValue { };
         time.timeZone = optionValue null;
+        # Read by the `warnings` of nixos-containers.nix (checked since 0.17)
+        virtualisation.containers.enable = optionValue false;
         ids.gids.keys = dummy;
         ids.uids.systemd-coredump = dummy;
         ids.gids.systemd-journal = dummy;
@@ -293,11 +295,34 @@ let
           listToAttrs (map (c: nameValuePair "container@${c}" (serviceCfg c)) WANContainers);
       };
     };
+  eval = import (nixosPath + "/lib/eval-config.nix") {
+    inherit baseModules system;
+    modules = [
+      extraModule
+      systemConfig
+    ];
+  };
+
+  # NixOS only checks `assertions` and `warnings` when building `system.build.toplevel`.
+  # extra-container builds `system.build.etc` instead, so apply the same checks here.
+  checkedEtc =
+    let
+      inherit (eval) config;
+      lib = eval.pkgs.lib;
+      failed = map (x: x.message) (builtins.filter (x: !x.assertion) config.assertions);
+    in
+    if failed != [ ] then
+      throw "\nFailed assertions:\n${builtins.concatStringsSep "\n" (map (x: "- ${x}") failed)}"
+    else
+      lib.showWarnings config.warnings config.system.build.etc;
 in
-import (nixosPath + "/lib/eval-config.nix") {
-  inherit baseModules system;
-  modules = [
-    extraModule
-    systemConfig
-  ];
+eval
+// {
+  config = eval.config // {
+    system = eval.config.system // {
+      build = eval.config.system.build // {
+        etc = checkedEtc;
+      };
+    };
+  };
 }

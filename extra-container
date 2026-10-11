@@ -42,7 +42,8 @@ showHelp() {
     echo
     echo "    --ssh"
     echo "      Generate SSH keys in /tmp and enable container SSH access."
-    echo "      The key files remain after exit and are reused on subsequent runs."
+    echo "      The key files remain after exit and are reused on subsequent runs"
+    echo "      until /tmp is cleared (e.g. on reboot)."
     echo "      Unlocks the function 'cssh' in 'extra-container shell'."
     echo "      Requires container option 'privateNetwork = true'."
     echo

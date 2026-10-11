@@ -9,7 +9,7 @@
 
 stdenv.mkDerivation rec {
   pname = "extra-container";
-  version = "0.16";
+  version = "0.17";
 
   src = pkgSrc;
 
@@ -33,7 +33,7 @@ stdenv.mkDerivation rec {
   meta = with lib; {
     description = "Run declarative containers without full system rebuilds";
     homepage = "https://github.com/extra-container/extra-container";
-    changelog = "https://github.com/extra-container/extra-container/blob/master/CHANGELOG.md";
+    changelog = "https://github.com/extra-container/extra-container/blob/main/CHANGELOG.md";
     license = licenses.mit;
     platforms = platforms.linux;
     maintainers = [ ];
