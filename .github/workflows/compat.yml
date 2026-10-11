@@ -10,7 +10,7 @@ on:
     - cron: "17 6 * * 1" # Mondays 06:17 UTC
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [ main ]
     paths:
       - eval-config.nix
       - flake.nix
