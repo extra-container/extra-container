@@ -26,6 +26,9 @@
           environment.systemPackages = [ (pkg pkgs) ];
           boot.extraSystemdUnitPaths = [ "/etc/systemd-mutable/system" ];
         };
+      nixosModules.examples.wgnet = { ... }: {
+        imports = [ ./examples/vpn/wgnet.nix ];
+      };
 
       overlays.default = final: prev: { extra-container = pkg final; };
 

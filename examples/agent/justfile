@@ -1,0 +1,33 @@
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+_state := env("XDG_STATE_HOME", env("HOME") + "/.local/state") + "/extra-container-agent"
+_identity := _state + "/id_ed25519"
+_project_root := env("PROJECT_ROOT", env("HOME") + "/project")
+_address := "10.251.0.2"
+
+_default:
+    just --list
+    
+_key:
+    @mkdir -p "{{ _state }}"
+    @chmod 700 "{{ _state }}"
+    @test -f "{{ _identity }}" || ssh-keygen -q -t ed25519 -N '' -f "{{ _identity }}"
+
+# Create and start, or update an existing container.
+start: _key
+    PROJECT_ROOT="{{ _project_root }}" CONTAINER_SSH_KEY="$(ssh-keygen -y -f '{{ _identity }}')" nix run --impure . -- create --start --restart-changed
+
+# Connect, starting the container first if necessary.
+ssh: _key
+    @systemctl is-active --quiet container@agent.service || just start
+    ssh -t -i "{{ _identity }}" -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile="{{ _state }}/known_hosts" -o ConnectionAttempts=20 -o ConnectTimeout=2 user@{{ _address }}
+
+ls:
+    @extra-container list
+
+stop:
+    sudo nixos-container stop agent
+
+destroy:
+    extra-container destroy agent
+    @if test -f "{{ _state }}/known_hosts"; then ssh-keygen -R "{{ _address }}" -f "{{ _state }}/known_hosts"; fi

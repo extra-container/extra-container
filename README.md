@@ -210,6 +210,13 @@ extra-container create -E '{ imports = [ <pwd/myfile.nix> ]; ... }'
 
 See [examples/flake](./examples/flake).
 
+More complete examples:
+
+- [Agent development sandbox](./examples/agent): selected project mounts, Codex,
+  Claude, zsh, and start-on-demand SSH; includes veth and shared bridge setup.
+- [WireGuard VPN container](./examples/vpn): hotel's network namespace design,
+  a host-side WireGuard module, and start-on-demand SSH.
+
 ## Usage
 
 ```

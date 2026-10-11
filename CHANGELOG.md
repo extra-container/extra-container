@@ -1,6 +1,9 @@
 # Unreleased
 
 - updated urls to github.com/extra-container/extra-container
+- new examples:
+  - ./examples/agent - development sandbox for agent development
+  - ./examples/vpn - container with wireguard vpn
 - removed use of ruby, replaced with bash & python
 - replaced Makefile with justfile
 
