@@ -398,7 +398,7 @@ The following tests are executed:
 - VM test
 
   Can be run manually via `nix build .#test`.\
-  This is a basic test using the [NixOS VM test framework](https://github.com/NixOS/nixpkgs/blob/main/nixos/lib/testing-python.nix).
+  This is a basic test using the [NixOS VM test framework](https://github.com/NixOS/nixpkgs/blob/master/nixos/lib/testing-python.nix).
   It is built as a Nix derivation, which makes it independent from the system
   environment.
 
