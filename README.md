@@ -82,7 +82,7 @@ Alternatively, add `extra-container.overlays.default` to `nixpkgs.overlays` and 
 
 Add `programs.extra-container.enable = true` to your configuration (NixOS ≥ 21.11).
 
-Note: as of nixos-25.11 and nixos-unstable, the `extra-container` package in nixpkgs is still
+Note: as of nixos-26.05 and nixos-unstable, the `extra-container` package in nixpkgs is still
 0.14 from the previous upstream repository. It lacks the compatibility fixes from 0.15 and later
 and may fail to evaluate containers against recent nixpkgs. Use the flake module or overlay
 above until nixpkgs is updated.
