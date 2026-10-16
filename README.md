@@ -219,6 +219,30 @@ or via stdin to access the working directory.
 extra-container create -E '{ imports = [ <pwd/myfile.nix> ]; ... }'
 ```
 
+## Security
+
+extra-container containers are NixOS containers (systemd-nspawn). Review these points
+before running partially-trusted code in a container.
+
+- **Host nix daemon**: masked by default. With `extra.hostNixDaemon = true`, processes in
+  the container can use the host nix daemon (`nix build`, `nix develop`, ...). The daemon
+  identifies clients by host UID, so a container user whose UID belongs to a host user in
+  `nix.settings.trusted-users` (e.g. `@wheel`) is a trusted nix user, which is equivalent
+  to root on the host.
+- **Nix inside containers**: `extra.overlayStore.enable = true` runs a nix daemon in the
+  container with a private store layered over the host store, so builds work without the
+  host daemon and without modifying the host store. Builds run without the nix sandbox,
+  which doesn't work in nspawn containers. See the option descriptions in
+  [eval-config.nix](./eval-config.nix).
+- **UIDs are shared with the host** unless the container sets `privateUsers`. Container
+  UID 1000 is host UID 1000 for file access through bind mounts and for the nix daemon.
+- **Root in a container is not isolated from the host** unless the container sets
+  `privateUsers`. Don't give container root to untrusted code.
+- **Network**: without `privateNetwork` (or `extra.addressPrefix`), the container shares
+  the host's network, including services listening on the host's localhost.
+
+To report a vulnerability, see [SECURITY.md](./SECURITY.md).
+
 ## Usage
 
 ```
@@ -288,7 +312,7 @@ extra-container create <store-path>
 
     Examples:
       Create from nixos system derivation
-      extra-container create /nix/store/9h..27-nixos-system-foo-18.03
+      extra-container create /nix/store/..-nixos-system-foo-26.05
 
       Create from nixos etc derivation
       extra-container create /nix/store/32..9j-etc
@@ -352,8 +376,8 @@ Now link the container files from the etc derivation to the main system, like so
 
 ```
 nixos-system/etc/systemd/system/container@CONTAINER.service -> /etc/systemd-mutable/system
-nixos-system/etc/containers/CONTAINER.conf -> /etc/containers       (system.stateVersion < 22.05)
-                                           -> /etc/nixos-containers (system.stateVersion ≥ 22.05)
+nixos-system/etc/containers/CONTAINER.conf -> /etc/nixos-containers (system.stateVersion ≥ 22.05)
+                                           -> /etc/containers       (system.stateVersion < 22.05)
 ```
 
 Finally, add gcroots pointing to the linked files.

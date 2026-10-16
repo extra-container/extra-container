@@ -134,6 +134,158 @@ let
 
   assertNonNull = var: containerAssert (var != null);
 
+  # Paths inside the container used by option `extra.overlayStore`
+  overlayUpper = "/nix/.overlay/upper";
+  overlayWork = "/nix/.overlay/work";
+  # State dir of the container's store. The default, /nix/var/nix, contains
+  # the host store's database (bind-mounted read-only), which is the lower store.
+  overlayState = "/nix/var/nix-overlay";
+  # /nix/var/nix/gcroots is bind-mounted from the host
+  overlayGCRootsDir = "/nix/var/nix/gcroots/extra-container-overlay";
+
+  overlayStoreModule =
+    containerCfg:
+    {
+      config,
+      pkgs,
+      lib,
+      ...
+    }:
+    let
+      cfg = containerCfg.extra.overlayStore;
+      storeUri =
+        "local-overlay://?lower-store=${lib.escapeURL "local?read-only=true"}"
+        + "&upper-layer=${overlayUpper}&state=${overlayState}";
+      # The overlay is mounted by the container, not by nspawn on the host: with
+      # `privateUsers`, only mounts inside the container's user namespace give the
+      # upper layer the container's UIDs.
+      # Mounts inherited from nspawn are locked, so container root can't unmount the
+      # mask of the host daemon socket, but it can unmount this overlay. That only
+      # exposes the read-only host store.
+      mountOverlay = pkgs.writeShellScript "extra-container-mount-overlay-store" ''
+        set -euo pipefail
+        export PATH=${
+          lib.makeBinPath [
+            pkgs.coreutils
+            pkgs.gnugrep
+            pkgs.util-linux
+          ]
+        }
+        if grep -qs '^overlay /nix/store overlay .*upperdir=${overlayUpper}' /proc/self/mounts; then
+          exit 0
+        fi
+        mkdir -p ${overlayUpper} ${overlayWork}
+        # `userxattr` is required for overlay mounts in user namespaces
+        mount -t overlay overlay \
+          -o lowerdir=/nix/store,upperdir=${overlayUpper},workdir=${overlayWork},userxattr \
+          /nix/store
+      '';
+      syncGCRoots = pkgs.writeShellScript "extra-container-sync-gcroots" ''
+        set -euo pipefail
+        export NIX_REMOTE=daemon
+        export PATH=${
+          lib.makeBinPath [
+            config.nix.package
+            pkgs.coreutils
+            pkgs.findutils
+          ]
+        }
+        tmp=$(mktemp -d)
+        trap 'rm -rf "$tmp"' EXIT
+        mkdir -p ${overlayGCRootsDir}
+
+        # Live paths of the container store that are not in the upper layer are
+        # host store paths
+        nix-store --gc --print-live | while IFS= read -r path; do
+          name=''${path#/nix/store/}
+          [[ -e ${overlayUpper}/$name ]] || printf '%s\n' "$name"
+        done | sort -u > "$tmp/live"
+        find ${overlayGCRootsDir} -mindepth 1 -maxdepth 1 -printf '%f\n' | sort > "$tmp/rooted"
+
+        # Add new roots before removing stale ones, so that live paths always have roots
+        comm -23 "$tmp/live" "$tmp/rooted" | while IFS= read -r name; do
+          ln -sfn "/nix/store/$name" "${overlayGCRootsDir}/$name"
+        done
+        comm -13 "$tmp/live" "$tmp/rooted" | while IFS= read -r name; do
+          rm -f "${overlayGCRootsDir}/$name"
+        done
+        echo "Rooted $(wc -l < "$tmp/live") host store paths"
+      '';
+      unitDeps = {
+        after = [
+          "nix-daemon.socket"
+          "nix-daemon.service"
+        ];
+        wants = [ "nix-daemon.socket" ];
+      };
+    in
+    lib.mkMerge [
+      {
+        nix.settings.experimental-features = [
+          "local-overlay-store"
+          "read-only-local-store"
+        ];
+        # The nix sandbox can't work in nspawn containers: it mounts /proc in a new user
+        # namespace, which the kernel refuses because nspawn mounts over parts of /proc.
+        nix.settings.sandbox = lib.mkDefault false;
+        # The store is set via NIX_REMOTE, not the `store` setting in nix.conf: the
+        # daemon would also read that setting, and clients send it to the daemon.
+        # `%` starts a specifier in systemd's Environment=
+        systemd.services.nix-daemon.environment.NIX_REMOTE =
+          builtins.replaceStrings [ "%" ] [ "%%" ]
+            storeUri;
+        # Root would otherwise use the store directly instead of the daemon
+        environment.variables.NIX_REMOTE = "daemon";
+        systemd.tmpfiles.rules = [ "d ${overlayState} 0755 root root - -" ];
+        systemd.services.extra-container-mount-overlay-store = {
+          description = "Mount the container's nix store overlay";
+          unitConfig.DefaultDependencies = false;
+          after = [ "local-fs.target" ];
+          before = [
+            "nix-daemon.socket"
+            "nix-daemon.service"
+            "sysinit.target"
+          ];
+          requiredBy = [
+            "nix-daemon.socket"
+            "nix-daemon.service"
+          ];
+          wantedBy = [ "sysinit.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStart = mountOverlay;
+          };
+        };
+      }
+      (lib.mkIf cfg.gcRoots.enable {
+        systemd.services.extra-container-sync-gcroots = unitDeps // {
+          description = "Add host GC roots for host store paths used by the container";
+          serviceConfig = {
+            Type = "oneshot";
+            ExecStart = syncGCRoots;
+          };
+        };
+        systemd.timers.extra-container-sync-gcroots = {
+          wantedBy = [ "timers.target" ];
+          timerConfig = {
+            OnActiveSec = cfg.gcRoots.interval;
+            OnUnitActiveSec = cfg.gcRoots.interval;
+          };
+        };
+        # Sync when the container stops
+        systemd.services.extra-container-sync-gcroots-on-stop = unitDeps // {
+          description = "Add host GC roots for host store paths used by the container on shutdown";
+          wantedBy = [ "multi-user.target" ];
+          serviceConfig = {
+            Type = "oneshot";
+            RemainAfterExit = true;
+            ExecStop = syncGCRoots;
+          };
+        };
+      })
+    ];
+
   extraModule =
     {
       config,
@@ -203,6 +355,98 @@ let
                         Requires privateNetwork == true.
                       '';
                     };
+                    hostNixDaemon = mkOption {
+                      type = types.bool;
+                      default = false;
+                      description = ''
+                        Give the container access to the host's nix daemon socket.
+
+                        When enabled, any process in the container can connect to the host
+                        nix daemon. The daemon identifies clients by their host UID, so unless
+                        `privateUsers` is enabled, container UIDs are host UIDs: container root
+                        and any container user whose UID matches a host user in
+                        `nix.settings.trusted-users` are trusted nix users, which is
+                        equivalent to root on the host. Untrusted users can still exploit
+                        daemon vulnerabilities (e.g. CVE-2026-110450).
+
+                        When disabled (the default), the socket is masked and nix commands
+                        that build or substitute (nix build, nix run, nix develop, nix-shell)
+                        fail inside the container. Running packages from the container's
+                        configuration is not affected.
+
+                        Without `privateUsers`, root in the container can remove the mask.
+                      '';
+                    };
+                    overlayStore = {
+                      enable = mkOption {
+                        type = types.bool;
+                        default = false;
+                        description = ''
+                          Run a nix daemon inside the container with a private, writable
+                          nix store layered over the host's store.
+
+                          The container mounts an OverlayFS on /nix/store at boot: the host
+                          store is the read-only lower layer, and builds and substitutions are
+                          written to an upper layer in the container's file system
+                          (${overlayUpper}). The host store and the host nix daemon are
+                          never modified or contacted. The upper layer persists across
+                          container restarts and is deleted by `extra-container destroy`.
+                          For ephemeral containers, it is deleted when the container stops.
+
+                          Use with `privateUsers` for isolation from the host. Without it,
+                          root in the container is not isolated from the host.
+
+                          This makes nix build, nix run, nix develop and nix-shell work inside
+                          the container. Builds run as the container's build users, without the
+                          nix sandbox, which doesn't work in nspawn containers: builders can
+                          read world-readable files in the container and use its network.
+
+                          Uses the experimental nix store type `local-overlay`, so the nix
+                          version used by the container must support it. Nix expects the lower
+                          store to only grow while the overlay is in use: paths that the host
+                          deletes (by garbage collection) break container store paths that
+                          depend on them. See `extra.overlayStore.gcRoots`.
+
+                          Can't be combined with `extra.hostNixDaemon`.
+                        '';
+                      };
+                      gcRoots = {
+                        enable = mkOption {
+                          type = types.bool;
+                          default = true;
+                          description = ''
+                            Protect host store paths that the container uses from host
+                            garbage collection.
+
+                            The container's store reuses host store paths instead of
+                            downloading or building them again. When such a path is not part
+                            of the container's configuration (e.g. a compiler used by a
+                            `nix develop` shell in the container), only the container knows
+                            that it is in use, and a host garbage collection can delete it,
+                            breaking the container store paths that depend on it.
+
+                            When enabled, a service in the container periodically adds host GC
+                            roots for all host store paths that are live in the container's
+                            store, and removes roots for paths that are no longer live. The
+                            roots are stored in /nix/var/nix/gcroots/per-container/<name> on
+                            the host and are deleted by `extra-container destroy`.
+
+                            Disable this for short-lived containers that are destroyed before
+                            the host runs garbage collection. A container store that has been
+                            broken by host garbage collection can be repaired by destroying and
+                            recreating the container.
+                          '';
+                        };
+                        interval = mkOption {
+                          type = types.str;
+                          default = "5min";
+                          description = ''
+                            How often GC roots are synchronized, as a systemd time span.
+                            Roots are also synchronized when the container stops.
+                          '';
+                        };
+                      };
+                    };
                   };
                 };
 
@@ -217,6 +461,17 @@ let
                       localAddress = "${prefix}.2";
                     }
                   )
+                  # nixos-containers.nix always bind-mounts the host daemon socket.
+                  # nspawn applies custom mounts sorted by destination, then by type,
+                  # and `--inaccessible` sorts after `--bind`, so this reliably masks it.
+                  (mkIf (!config.extra.hostNixDaemon && !config.extra.overlayStore.enable) {
+                    extraFlags = [ "--inaccessible=/nix/var/nix/daemon-socket" ];
+                  })
+                  # The tmpfs (sorted after the bind mount, like `--inaccessible`) masks the
+                  # host daemon socket and holds the socket of the container's own daemon.
+                  (mkIf config.extra.overlayStore.enable {
+                    extraFlags = [ "--tmpfs=/nix/var/nix/daemon-socket" ];
+                  })
                   {
                     config = (
                       { pkgs, ... }@moduleArgs:
@@ -249,6 +504,7 @@ let
                           # Silence system state warning
                           system.stateVersion = lib.mkDefault moduleArgs.config.system.nixos.release;
                         }
+                        (mkIf config.extra.overlayStore.enable (overlayStoreModule config moduleArgs))
                         (mkIf config.extra.enableSSH {
                           services.openssh.enable = containerAssert config.privateNetwork name ''
                             option extra.enableSSH requires privateNetwork to be enabled.
@@ -268,6 +524,15 @@ let
       };
 
       config = {
+        assertions = concatLists (
+          mapAttrsToList (name: cfg: [
+            {
+              assertion = !(cfg.extra.hostNixDaemon && cfg.extra.overlayStore.enable);
+              message = "container '${name}': options extra.hostNixDaemon and extra.overlayStore.enable can't both be enabled";
+            }
+          ]) config.containers
+        );
+
         systemd.services =
           let
             WANContainers = builtins.filter (

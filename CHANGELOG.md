@@ -1,3 +1,21 @@
+# 1.0.0-pre.1
+
+- Hardening & security improvements (BREAKING, see below)
+
+- Adopting semver version numbering (major.minor.patch, with an optional pre-release suffix such as `-pre.1`). Breaking changes always bump at least the minor version.
+- New release branches starting with 1.0: each minor version has a branch `release-x.y` that only receives non-breaking fixes, so a flake input such as `github:extra-container/extra-container/release-1.0` picks up patch releases on `nix flake update`. `main` is the development branch and may contain breaking changes. Releases are tagged `vX.Y.Z`. See [RELEASING.md](./RELEASING.md).
+
+- **BREAKING**: the host nix daemon socket is no longer accessible inside containers.
+  - Before: every container could connect to the host nix daemon (the NixOS container module bind-mounts `/nix/var/nix/daemon-socket`). The daemon identifies clients by host UID, so container root, and any container user whose UID matched a host user in `nix.settings.trusted-users` (e.g. via `@wheel`), was a trusted nix user, which is equivalent to root on the host. Untrusted container users could also reach daemon vulnerabilities such as CVE-2026-110450.
+  - After: the socket is masked. Inside the container, nix commands that build or substitute (`nix build`, `nix run`, `nix develop`, `nix-shell`) fail with `cannot connect to socket at '/nix/var/nix/daemon-socket/socket'`.
+  - To restore the old behavior for a container: `extra.hostNixDaemon = true;`. Read the option description (and the Security section of the README) first.
+- Enhancements
+  - New option `extra.overlayStore.enable` (default: false): run a nix daemon inside the container with a private store layered over the host store (OverlayFS). `nix build`, `nix develop` etc. work inside the container without access to the host nix daemon and without modifying the host store. Uses the experimental `local-overlay` store type. Builds run without the nix sandbox, which doesn't work in nspawn containers.
+  - New option `extra.overlayStore.gcRoots.enable` (default: true): periodically add host GC roots for host store paths used by the container's store, so that host garbage collection doesn't break the container store.
+- Tests
+  - The VM test checks that the daemon socket is masked by default and reachable with `extra.hostNixDaemon = true`.
+  - The VM test checks builds with `extra.overlayStore`: the host store is not modified, GC roots protect host paths used by the container, and `destroy` removes the upper layer and GC roots.
+
 # 0.17
 
 - Project moved to [github.com/extra-container/extra-container](https://github.com/extra-container/extra-container)

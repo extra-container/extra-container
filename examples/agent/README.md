@@ -26,9 +26,9 @@ just destroy
 
 Set `PROJECT_ROOT=/absolute/path/to/projects` before running `just` to use a different project root. The recipes generate a dedicated SSH key under `${XDG_STATE_HOME:-$HOME/.local/state}/extra-container-agent`, outside the flake source. Only its public key is passed into the Nix configuration. SSH host keys are remembered there; `just destroy` removes the old container's known-host entry. `--impure` is used only to read the project root and public key from the environment.
 
-The container's home persists across stops and updates, and is removed by `just destroy`. Log into `codex` and `claude` inside the container. Install project-specific toolchains with `nix develop` in each project, or extend `environment.systemPackages` in this flake.
+The container's home persists across stops and updates, and is removed by `just destroy`. Log into `codex` and `claude` inside the container. Install project-specific toolchains by extending `environment.systemPackages` in this flake. `nix develop` and other commands that build inside the container are unavailable, because the container has no access to the host nix daemon. Enabling `extra.hostNixDaemon` would make the agent's user (UID 1000) a trusted nix user if that UID belongs to a host user in `nix.settings.trusted-users`, which gives the agent root-equivalent access to the host. See the Security section of the main README.
 
-The flake offers the Numtide binary cache used by the agent packages. Nix may ask whether to accept these cache settings on first use.
+The flake uses the Numtide binary cache used by the agent packages. Nix may ask whether to accept these cache settings on first use.
 
 As configured, **sudo is not installed** and "user" is not in the sudoers group. To get a root shell in the container, run `sudo machinectl shell agent` from the host. Once flake.nix and imports are properly configured, root in the container is very rarely needed.
 
