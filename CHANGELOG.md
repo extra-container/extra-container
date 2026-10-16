@@ -12,9 +12,12 @@
 - Enhancements
   - New option `extra.overlayStore.enable` (default: false): run a nix daemon inside the container with a private store layered over the host store (OverlayFS). `nix build`, `nix develop` etc. work inside the container without access to the host nix daemon and without modifying the host store. Uses the experimental `local-overlay` store type. Builds run without the nix sandbox, which doesn't work in nspawn containers.
   - New option `extra.overlayStore.gcRoots.enable` (default: true): periodically add host GC roots for host store paths used by the container's store, so that host garbage collection doesn't break the container store.
+- Fixes
+  - `extra-container destroy` failed to remove the container directory (`rm: cannot remove '.../var/empty': Operation not permitted`) on systems without `chattr` in `PATH`, e.g. NixOS systems with systemd in stage 1 and no ext filesystems ([#4](https://github.com/extra-container/extra-container/issues/4)). extra-container now provides `chattr` (e2fsprogs).
 - Tests
   - The VM test checks that the daemon socket is masked by default and reachable with `extra.hostNixDaemon = true`.
   - The VM test checks builds with `extra.overlayStore`: the host store is not modified, GC roots protect host paths used by the container, and `destroy` removes the upper layer and GC roots.
+  - The VM test runs the README example on a system without e2fsprogs and checks that `destroy` removes the container directory. `util/test-readme.sh` checks this too.
 
 # 0.17
 

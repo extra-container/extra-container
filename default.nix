@@ -3,6 +3,7 @@
   lib,
   nixos-container,
   openssh,
+  e2fsprogs,
   glibcLocales,
   pkgSrc ? lib.cleanSource ./.,
 }:
@@ -19,8 +20,15 @@ stdenv.mkDerivation rec {
     share=$out/share/extra-container
     install $src/eval-config.nix -Dt $share
 
-    # Use existing PATH for systemctl and machinectl
-    scriptPath="export PATH=${lib.makeBinPath [ openssh ]}:\$PATH"
+    # Use existing PATH for systemctl and machinectl.
+    # e2fsprogs provides chattr, required by `nixos-container destroy` to remove
+    # immutable /var/empty dirs. It's not installed on all NixOS systems (#4).
+    scriptPath="export PATH=${
+      lib.makeBinPath [
+        openssh
+        e2fsprogs
+      ]
+    }:\$PATH"
 
     sed -i "
       s|evalConfig=.*|evalConfig=$share/eval-config.nix|

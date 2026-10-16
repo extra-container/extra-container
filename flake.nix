@@ -109,6 +109,7 @@
               with pkgs;
               [
                 openssh
+                e2fsprogs
               ]
             );
           in
@@ -135,126 +136,157 @@
 
         packages = {
           # Run a basic extra-container test in a NixOS VM
-          test = pkgs.testers.nixosTest {
-            name = "extra-container";
+          test =
+            let
+              # The introductory example of README.md, as run by util/test-readme.sh
+              readmeExample = pkgs.runCommand "readme-example.sh" { nativeBuildInputs = [ pkgs.python3 ]; } ''
+                python3 ${./util/readme.py} extract-example --readme ${./README.md} > $out
+              '';
+              # The container config of the example: the heredoc passed to `extra-container create`
+              readmeDemoConfig =
+                let
+                  afterHeredocStart = lib.elemAt (lib.splitString "<<'EOF'\n" (builtins.readFile ./README.md)) 1;
+                in
+                import (builtins.toFile "readme-demo.nix" (lib.head (lib.splitString "\nEOF\n" afterHeredocStart)));
+            in
+            pkgs.testers.nixosTest {
+              name = "extra-container";
 
-            nodes.machine =
-              { config, pkgs, ... }:
-              {
-                imports = [ self.nixosModules.default ];
-                # Used by testScript to run commands in containers
-                environment.systemPackages = [ pkgs.nixos-container ];
-                # memorySize = 1024 needed for evaluating the container system
-                # memorySize = 1200 needed to avoid error during boot:
-                #   'agetty[817]: failed to open credentials directory'
-                virtualisation.memorySize = 1200;
-                nix.nixPath = [ "nixpkgs=${nixpkgs}" ];
-                system.stateVersion = config.system.nixos.release;
-                # Pre-build the containers used by testScript
-                system.extraDependencies =
-                  let
-                    buildContainer =
-                      systemConfig:
-                      (import ./eval-config.nix {
-                        nixosPath = "${nixpkgs}/nixos";
-                        legacyInstallDirs = false;
-                        inherit system systemConfig;
-                      }).config.system.build.etc;
-                  in
-                  [
-                    (buildContainer {
-                      containers.test.config.environment.etc.testFile.text = "testSuccess";
-                    })
-                    (buildContainer {
-                      containers.test.extra.hostNixDaemon = true;
-                    })
-                    # privateUsers can't be tested here: it requires idmapped mounts of
-                    # /nix/store, which the VM's overlayfs store doesn't support
-                    (buildContainer {
-                      containers.test.extra.overlayStore.enable = true;
-                    })
+              nodes.machine =
+                { config, pkgs, ... }:
+                {
+                  imports = [ self.nixosModules.default ];
+                  # Used by testScript to run commands in containers and the README example
+                  environment.systemPackages = [
+                    pkgs.nixos-container
+                    pkgs.curl
                   ];
-              };
+                  environment.etc."readme-example/example.sh".source = readmeExample;
+                  environment.etc."readme-example/shims.sh".source = ./util/readme-shims.sh;
+                  # Like systems without ext filesystems and with systemd in stage 1, the
+                  # system has no e2fsprogs (chattr), see issue #4
+                  system.fsPackages = lib.mkForce [ ];
+                  # memorySize = 1024 needed for evaluating the container system
+                  # memorySize = 1200 needed to avoid error during boot:
+                  #   'agetty[817]: failed to open credentials directory'
+                  virtualisation.memorySize = 1200;
+                  nix.nixPath = [ "nixpkgs=${nixpkgs}" ];
+                  system.stateVersion = config.system.nixos.release;
+                  # Pre-build the containers used by testScript
+                  system.extraDependencies =
+                    let
+                      buildContainer =
+                        systemConfig:
+                        (import ./eval-config.nix {
+                          nixosPath = "${nixpkgs}/nixos";
+                          legacyInstallDirs = false;
+                          inherit system systemConfig;
+                        }).config.system.build.etc;
+                    in
+                    [
+                      (buildContainer {
+                        containers.test.config.environment.etc.testFile.text = "testSuccess";
+                      })
+                      (buildContainer {
+                        containers.test.extra.hostNixDaemon = true;
+                      })
+                      # privateUsers can't be tested here: it requires idmapped mounts of
+                      # /nix/store, which the VM's overlayfs store doesn't support
+                      (buildContainer {
+                        containers.test.extra.overlayStore.enable = true;
+                      })
+                      (buildContainer readmeDemoConfig)
+                    ];
+                };
 
-            testScript = ''
-              config = '{ containers.test.config.environment.etc.testFile.text = "testSuccess"; }'
-              output = machine.succeed(
-                f"extra-container shell -E '{config}' --run c cat /etc/testFile"
-              )
-              assert "testSuccess" in output, f"Test failed. Output:\n{output}"
+              testScript = ''
+                # The README example. Issue #4: `destroy` failed to remove the container dir
+                # on systems without chattr
+                machine.fail("command -v chattr")
+                machine.succeed(
+                  "bash -euo pipefail -c 'source /etc/readme-example/shims.sh; source /etc/readme-example/example.sh'"
+                )
+                machine.fail("extra-container list | grep -x demo")
+                machine.fail("test -e /var/lib/nixos-containers/demo")
 
-              # The host nix daemon socket is masked by default
-              storeInfo = "nix --extra-experimental-features nix-command store info --json --store daemon"
-              status, output = machine.execute(f"extra-container shell -E '{config}' --run c {storeInfo}")
-              assert status != 0, f"Host nix daemon reachable by default. Output:\n{output}"
-              output = machine.succeed(
-                f"extra-container shell -E '{config}' --run c ls -A /nix/var/nix/daemon-socket"
-              )
-              assert "socket" not in output, f"Host nix daemon socket visible. Output:\n{output}"
+                config = '{ containers.test.config.environment.etc.testFile.text = "testSuccess"; }'
+                output = machine.succeed(
+                  f"extra-container shell -E '{config}' --run c cat /etc/testFile"
+                )
+                assert "testSuccess" in output, f"Test failed. Output:\n{output}"
 
-              # Option `extra.hostNixDaemon` exposes the socket
-              daemonConfig = '{ containers.test.extra.hostNixDaemon = true; }'
-              output = machine.succeed(f"extra-container shell -E '{daemonConfig}' --run c {storeInfo}")
-              assert "\"trusted\"" in output, f"Host nix daemon not reachable. Output:\n{output}"
+                # The host nix daemon socket is masked by default
+                storeInfo = "nix --extra-experimental-features nix-command store info --json --store daemon"
+                status, output = machine.execute(f"extra-container shell -E '{config}' --run c {storeInfo}")
+                assert status != 0, f"Host nix daemon reachable by default. Output:\n{output}"
+                output = machine.succeed(
+                  f"extra-container shell -E '{config}' --run c ls -A /nix/var/nix/daemon-socket"
+                )
+                assert "socket" not in output, f"Host nix daemon socket visible. Output:\n{output}"
 
-              # Option `extra.overlayStore`
-              import time
-              def run(cmd):
-                return machine.succeed(f"nixos-container run test -- {cmd}").strip()
+                # Option `extra.hostNixDaemon` exposes the socket
+                daemonConfig = '{ containers.test.extra.hostNixDaemon = true; }'
+                output = machine.succeed(f"extra-container shell -E '{daemonConfig}' --run c {storeInfo}")
+                assert "\"trusted\"" in output, f"Host nix daemon not reachable. Output:\n{output}"
 
-              # A host store path that is not part of the container config
-              machine.succeed(
-                "echo 'derivation { name = \"host-dep\"; system = builtins.currentSystem; "
-                + "builder = \"/bin/sh\"; args = [ \"-c\" \"echo host-dep > $out\" ]; }' > /root/x.nix"
-              )
-              hostDep = machine.succeed("nix-build /root/x.nix -o /root/x").strip()
+                # Option `extra.overlayStore`
+                import time
+                def run(cmd):
+                  return machine.succeed(f"nixos-container run test -- {cmd}").strip()
 
-              overlayConfig = '{ containers.test.extra.overlayStore.enable = true; }'
-              machine.succeed(f"extra-container create -E '{overlayConfig}' --start")
-              containerRoot = "/var/lib/nixos-containers/test"
+                # A host store path that is not part of the container config
+                machine.succeed(
+                  "echo 'derivation { name = \"host-dep\"; system = builtins.currentSystem; "
+                  + "builder = \"/bin/sh\"; args = [ \"-c\" \"echo host-dep > $out\" ]; }' > /root/x.nix"
+                )
+                hostDep = machine.succeed("nix-build /root/x.nix -o /root/x").strip()
 
-              # Build a path in the container that depends on the host store path.
-              # The build records whether it runs in the nix sandbox, where /etc/os-release
-              # doesn't exist. The sandbox is disabled in containers (see eval-config.nix).
-              machine.succeed(
-                "echo 'derivation { name = \"overlay-test\"; system = builtins.currentSystem; "
-                + f"builder = \"/bin/sh\"; dep = builtins.storePath \"{hostDep}\"; "
-                + "args = [ \"-c\" \"test -e /etc/os-release && s=no || s=yes; echo $dep sandbox=$s > $out\" ]; }' "
-                + f"> {containerRoot}/root/y.nix"
-              )
-              built = run("nix-build /root/y.nix -o /root/y")
-              output = run(f"cat {built}")
-              assert output == f"{hostDep} sandbox=no", f"Unexpected build output: {output}"
+                overlayConfig = '{ containers.test.extra.overlayStore.enable = true; }'
+                machine.succeed(f"extra-container create -E '{overlayConfig}' --start")
+                containerRoot = "/var/lib/nixos-containers/test"
 
-              # The build output is only in the container's upper layer
-              machine.fail(f"test -e {built}")
-              machine.fail(f"nix-store --query --hash {built}")
-              machine.succeed(f"test -e {containerRoot}/nix/.overlay/upper/{built.removeprefix('/nix/store/')}")
+                # Build a path in the container that depends on the host store path.
+                # The build records whether it runs in the nix sandbox, where /etc/os-release
+                # doesn't exist. The sandbox is disabled in containers (see eval-config.nix).
+                machine.succeed(
+                  "echo 'derivation { name = \"overlay-test\"; system = builtins.currentSystem; "
+                  + f"builder = \"/bin/sh\"; dep = builtins.storePath \"{hostDep}\"; "
+                  + "args = [ \"-c\" \"test -e /etc/os-release && s=no || s=yes; echo $dep sandbox=$s > $out\" ]; }' "
+                  + f"> {containerRoot}/root/y.nix"
+                )
+                built = run("nix-build /root/y.nix -o /root/y")
+                output = run(f"cat {built}")
+                assert output == f"{hostDep} sandbox=no", f"Unexpected build output: {output}"
 
-              # GC roots for host store paths used by the container
-              hostRoots = "/nix/var/nix/gcroots/per-container/test/extra-container-overlay"
-              machine.succeed("rm /root/x")
-              start = time.monotonic()
-              run("systemctl start extra-container-sync-gcroots.service")
-              duration = time.monotonic() - start
-              props = run(
-                "systemctl show -p ExecMainStartTimestampMonotonic -p ExecMainExitTimestampMonotonic "
-                + "--value extra-container-sync-gcroots.service"
-              ).split()
-              serviceDuration = (int(props[1]) - int(props[0])) / 1e6
-              rooted = run("journalctl -o cat -u extra-container-sync-gcroots.service --grep Rooted")
-              print(f"GC roots sync: {serviceDuration:.2f}s (with nixos-container run: {duration:.2f}s), {rooted}")
-              machine.succeed(f"test -L {hostRoots}/{hostDep.removeprefix('/nix/store/')}")
-              machine.fail(f"nix-store --delete {hostDep}")
-              assert run(f"cat {built}").startswith(hostDep)
+                # The build output is only in the container's upper layer
+                machine.fail(f"test -e {built}")
+                machine.fail(f"nix-store --query --hash {built}")
+                machine.succeed(f"test -e {containerRoot}/nix/.overlay/upper/{built.removeprefix('/nix/store/')}")
 
-              # Destroy removes the upper layer and the GC roots
-              machine.succeed("extra-container destroy test")
-              machine.fail(f"test -e {containerRoot}")
-              machine.fail(f"test -e {hostRoots}")
-              machine.succeed(f"nix-store --delete {hostDep}")
-            '';
-          };
+                # GC roots for host store paths used by the container
+                hostRoots = "/nix/var/nix/gcroots/per-container/test/extra-container-overlay"
+                machine.succeed("rm /root/x")
+                start = time.monotonic()
+                run("systemctl start extra-container-sync-gcroots.service")
+                duration = time.monotonic() - start
+                props = run(
+                  "systemctl show -p ExecMainStartTimestampMonotonic -p ExecMainExitTimestampMonotonic "
+                  + "--value extra-container-sync-gcroots.service"
+                ).split()
+                serviceDuration = (int(props[1]) - int(props[0])) / 1e6
+                rooted = run("journalctl -o cat -u extra-container-sync-gcroots.service --grep Rooted")
+                print(f"GC roots sync: {serviceDuration:.2f}s (with nixos-container run: {duration:.2f}s), {rooted}")
+                machine.succeed(f"test -L {hostRoots}/{hostDep.removeprefix('/nix/store/')}")
+                machine.fail(f"nix-store --delete {hostDep}")
+                assert run(f"cat {built}").startswith(hostDep)
+
+                # Destroy removes the upper layer and the GC roots
+                machine.succeed("extra-container destroy test")
+                machine.fail(f"test -e {containerRoot}")
+                machine.fail(f"test -e {hostRoots}")
+                machine.succeed(f"nix-store --delete {hostDep}")
+              '';
+            };
 
           # Used by apps.vm
           vm =

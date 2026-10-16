@@ -28,29 +28,8 @@ python3 "$repoDir/util/readme.py" extract-example > "$example"
 bash -n "$example"
 trap 'status=$?; extra-container destroy demo || status=1; rm -f "$example"; exit "$status"' EXIT
 
-# Keep the documented commands intact while checking their observable results.
-sudo() { "$@"; }
-curl() {
-    local response
-    response=$(command curl --fail --silent --show-error --noproxy '*' \
-        --connect-timeout 2 --max-time 5 --retry 30 --retry-delay 1 \
-        --retry-connrefused --retry-max-time 60 "$@")
-    [[ $response == hello ]] || {
-        echo "Expected 'hello', got '$response'" >&2
-        return 1
-    }
-    printf '%s\n' "$response"
-}
-nixos-container() {
-    local status
-    status=$(command nixos-container "$@")
-    [[ $status == up ]] || {
-        echo "Expected container status 'up', got '$status'" >&2
-        return 1
-    }
-    printf '%s\n' "$status"
-}
-
+# shellcheck source=util/readme-shims.sh
+source "$repoDir/util/readme-shims.sh"
 # shellcheck source=/dev/null
 source "$example"
 containers=$(extra-container list)
@@ -58,5 +37,12 @@ if grep -qx demo <<< "$containers"; then
     echo "Example failed to destroy container 'demo'." >&2
     exit 1
 fi
+# Issue #4: destroy left the container dir behind
+for dir in /var/lib/nixos-containers/demo /var/lib/containers/demo; do
+    if [[ -e $dir ]]; then
+        echo "Example failed to remove $dir." >&2
+        exit 1
+    fi
+done
 trap 'rm -f "$example"' EXIT
 echo "README example passed."
