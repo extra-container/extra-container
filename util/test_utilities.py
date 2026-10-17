@@ -75,10 +75,37 @@ class ReadmeTests(unittest.TestCase):
             self.assertEqual(subprocess.check_output(command, text=True), "")
             self.assertEqual(path.read_text(), output)
 
+    def test_checked_in_example_matches_readme(self):
+        subprocess.run(
+            [sys.executable, str(HERE / "readme.py"), "check-example"], check=True
+        )
+
+    def test_example_config_matches_prebuilt_container(self):
+        example = (HERE.parent / "examples/readme/example.sh").read_text()
+        config = example.split("<<'EOF'\n", 1)[1].split("\nEOF\n", 1)[0] + "\n"
+        self.assertEqual(config, (HERE.parent / "examples/readme/container.nix").read_text())
+
+    def test_check_rejects_drift_and_update_repairs_only_example(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "README.md"
+            path.write_text("before\n## Example\n```bash\necho stale\n```\n## Other\nafter\n")
+            command = [sys.executable, str(HERE / "readme.py")]
+            check = command + ["check-example", "--readme", str(path)]
+            result = subprocess.run(check, text=True, capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("update-example", result.stderr)
+            self.assertIn("-echo stale", result.stderr)
+            update = command + ["update-example", "--readme", str(path)]
+            subprocess.run(update, check=True, capture_output=True)
+            subprocess.run(check, check=True)
+            self.assertTrue(path.read_text().startswith("before\n## Example\n```bash\n"))
+            self.assertTrue(path.read_text().endswith("```\n## Other\nafter\n"))
+            self.assertEqual(subprocess.check_output(update, text=True), "")
+
     def test_actual_example_is_valid_bash(self):
-        text = (HERE.parent / "README.md").read_text()
-        start, end = readme.code_block(text, "Example", "bash")
-        subprocess.run(["bash", "-n"], input=text[start:end], text=True, check=True)
+        subprocess.run(
+            ["bash", "-n", str(HERE.parent / "examples/readme/example.sh")], check=True
+        )
 
 
 class ExampleRunnerTests(unittest.TestCase):
@@ -86,6 +113,11 @@ class ExampleRunnerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "util").mkdir()
+            (root / "examples/readme").mkdir(parents=True)
+            (root / "examples/readme/example.sh").write_text(
+                (HERE.parent / "examples/readme/example.sh").read_text()
+            )
+            (root / "util/readme-shims.sh").write_text((HERE / "readme-shims.sh").read_text())
             (root / "README.md").write_text((HERE.parent / "README.md").read_text())
             (root / "util/readme.py").write_text((HERE / "readme.py").read_text())
             # Exercise the real runner with fake commands, skipping only sudo elevation.

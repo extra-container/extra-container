@@ -47,6 +47,14 @@
             containers.agent = {
               extra.addressPrefix = "10.251.0";
               extra.enableWAN = true;
+
+              # further protect host:
+              # block socket access to host nix daemin, and use overlay fs
+              # for /nix/store, so container cannot change host's nix store.
+              extra.hostNixDaemon = false;
+              extra.overlayStore.enable = true;
+              extra.overlayStore.gcRoots.enable = true;
+
               bindMounts = builtins.listToAttrs (
                 map (name: {
                   name = "/home/user/project/${name}";

@@ -138,16 +138,8 @@
           # Run a basic extra-container test in a NixOS VM
           test =
             let
-              # The introductory example of README.md, as run by util/test-readme.sh
-              readmeExample = pkgs.runCommand "readme-example.sh" { nativeBuildInputs = [ pkgs.python3 ]; } ''
-                python3 ${./util/readme.py} extract-example --readme ${./README.md} > $out
-              '';
-              # The container config of the example: the heredoc passed to `extra-container create`
-              readmeDemoConfig =
-                let
-                  afterHeredocStart = lib.elemAt (lib.splitString "<<'EOF'\n" (builtins.readFile ./README.md)) 1;
-                in
-                import (builtins.toFile "readme-demo.nix" (lib.head (lib.splitString "\nEOF\n" afterHeredocStart)));
+              readmeExample = ./examples/readme/example.sh;
+              readmeDemoConfig = import ./examples/readme/container.nix;
             in
             pkgs.testers.nixosTest {
               name = "extra-container";

@@ -18,7 +18,7 @@ jobs:
       - name: nixfmt
         run: nix run nixpkgs#nixfmt -- --check flake.nix default.nix eval-config.nix examples/*/*.nix
       - name: shellcheck
-        run: nix run nixpkgs#shellcheck -- extra-container test.sh run-tests-in-container.sh util/install.sh util/test-readme.sh examples/flake/usage.sh
+        run: nix run nixpkgs#shellcheck -- --external-sources --shell=bash extra-container test.sh run-tests-in-container.sh util/install.sh util/test-readme.sh examples/flake/usage.sh examples/readme/example.sh
       - name: Utility tests
         run: nix shell nixpkgs#python3 -c python3 -B util/test_utilities.py
       - name: Examples evaluate against this checkout

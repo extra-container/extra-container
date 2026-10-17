@@ -34,6 +34,16 @@ As configured, **sudo is not installed** and "user" is not in the sudoers group.
 
 ## Options
 
+### Hardening
+
+Blocking the host Nix daemon socket prevents container processes from using a matching host UID to gain trusted Nix access, which is equivalent to host root when that host user is in `nix.settings.trusted-users` (for example, through `@wheel`). Setting `privateUsers` additionally remaps container UIDs/GIDs, including root, to a separate host ID range; this example currently leaves it unset, so container and host IDs still coincide and writable project mounts use the host user’s permissions.
+
+```
+extra.hostNixDaemon = false;
+extra.overlayStore.enable = true;
+extra.overlayStore.gcRoots.enable = true;
+```
+
 ### Persistent home dir across destroy
 
 To retain the user's .config, .claude, etc. across destroy & restart, `mkdir -p ./home/user` and add it as a bindMount into `/home/user`. Adjust `.gitignore` to manage which ./home/user folders you want to preserve in vcs.

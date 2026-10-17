@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Update README usage or extract its introductory Bash example."""
+"""Update README usage and check or update its introductory example."""
 
 import argparse
+import difflib
 import re
 import subprocess
 from pathlib import Path
@@ -27,7 +28,7 @@ def code_block(text, section, language):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["update-usage", "extract-example"])
+    parser.add_argument("command", choices=["update-usage", "check-example", "update-example"])
     parser.add_argument("--readme", type=Path, default=ROOT / "README.md")
     args = parser.parse_args()
     text = args.readme.read_text()
@@ -35,8 +36,26 @@ def main():
         ("Usage", "") if args.command == "update-usage" else ("Example", "bash")
     )
     start, end = code_block(text, section, language)
-    if args.command == "extract-example":
-        print(text[start:end], end="")
+    if args.command != "update-usage":
+        example = (ROOT / "examples/readme/example.sh").read_text()
+        if args.command == "check-example":
+            if text[start:end] != example:
+                diff = difflib.unified_diff(
+                    text[start:end].splitlines(keepends=True),
+                    example.splitlines(keepends=True),
+                    fromfile=str(args.readme),
+                    tofile="examples/readme/example.sh",
+                )
+                parser.exit(
+                    1,
+                    "".join(diff)
+                    + "Run python3 util/readme.py update-example to sync the README.\n",
+                )
+            return
+        updated = text[:start] + example + text[end:]
+        if updated != text:
+            args.readme.write_text(updated)
+            print(f"Updated {args.readme.name}")
         return
     output = subprocess.check_output([str(ROOT / "extra-container"), "--help"], text=True)
     usage = re.search(r"\A.*?Usage:\s*(.*)", output, re.DOTALL)

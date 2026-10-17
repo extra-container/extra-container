@@ -394,8 +394,14 @@ Within the shell, you can run extra-container from the [local source](./extra-co
 When changing the `Usage` documentation in `extra-container`, run `just doc` to copy
 these changes to `README.md`.
 
-Run `just testReadme` (or `nix run .#testReadme`) to extract and run the first
-Bash block under `## Example`. This needs sudo and a systemd host with Nix;
+The introductory example lives in [examples/readme/example.sh](./examples/readme/example.sh).
+Its heredoc must match [container.nix](./examples/readme/container.nix), which the VM
+imports to pre-build the container. `just testUtilities` checks both this match and
+the README code block. After editing the example, run
+`python3 util/readme.py update-example` to copy it into the README.
+
+Run `just testReadme` (or `nix run .#testReadme`) to run the checked-in example.
+This needs sudo and a systemd host with Nix;
 it checks the HTTP response and container status, and cleans up after failures.
 It refuses to run if a container named `demo` already exists.
 Run `nix run .#testReadme -- --extract` to print the example without running it.

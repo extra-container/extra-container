@@ -5,7 +5,7 @@ repoDir=$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)
 export PATH="$repoDir:$PATH"
 
 if [[ ${1-} == --extract ]]; then
-    exec python3 "$repoDir/util/readme.py" extract-example
+    exec cat "$repoDir/examples/readme/example.sh"
 fi
 if (($#)); then
     echo "Usage: $0 [--extract]" >&2
@@ -22,11 +22,15 @@ if grep -qx demo <<< "$containers" || grep -qx demo <<< "$systemContainers"; the
     exit 1
 fi
 
-example=$(mktemp)
-trap 'rm -f "$example"' EXIT
-python3 "$repoDir/util/readme.py" extract-example > "$example"
+python3 "$repoDir/util/readme.py" check-example
+example="$repoDir/examples/readme/example.sh"
 bash -n "$example"
-trap 'status=$?; extra-container destroy demo || status=1; rm -f "$example"; exit "$status"' EXIT
+cleanup() {
+    local status=$?
+    extra-container destroy demo || status=1
+    exit "$status"
+}
+trap cleanup EXIT
 
 # shellcheck source=util/readme-shims.sh
 source "$repoDir/util/readme-shims.sh"
@@ -44,5 +48,5 @@ for dir in /var/lib/nixos-containers/demo /var/lib/containers/demo; do
         exit 1
     fi
 done
-trap 'rm -f "$example"' EXIT
+trap - EXIT
 echo "README example passed."
