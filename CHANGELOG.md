@@ -1,3 +1,7 @@
+# 1.0.1
+
+- fix example script (remove shebang)
+
 # 1.0.0
 
 - Hardening & security improvements (**BREAKING**, see below)

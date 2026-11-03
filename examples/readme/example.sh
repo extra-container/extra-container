@@ -1,4 +1,3 @@
-#!/usr/bin/env bash
 
 sudo extra-container create --start <<'EOF'
 {

@@ -24,7 +24,7 @@ Flake inputs:
 # Follow release-1.0 branch and get non-breaking patches with `nix flake update`
 inputs.extra-container.url = "github:extra-container/extra-container/release-1.0";
 # Pin exact release
-inputs.extra-container.url = "github:extra-container/extra-container/v1.0.0";
+inputs.extra-container.url = "github:extra-container/extra-container/v1.0.1";
 # YOLO/Development, may break
 inputs.extra-container.url = "github:extra-container/extra-container";
 ```
