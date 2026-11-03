@@ -31,7 +31,8 @@ Please include:
 - the NixOS version or commit
 - OS platform and version
 - a description of the issue and its impact
-- reproduction steps or a proof of concept
+- reproduction steps, a proof of concept, or
+  ideally: link to a flake.nix with a specific container definition
 - whether you were able to reproduce on a nixos container
 - any suggested remediation
 - your contact information

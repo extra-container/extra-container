@@ -26,7 +26,7 @@ just destroy
 
 Set `PROJECT_ROOT=/absolute/path/to/projects` before running `just` to use a different project root. The recipes generate a dedicated SSH key under `${XDG_STATE_HOME:-$HOME/.local/state}/extra-container-agent`, outside the flake source. Only its public key is passed into the Nix configuration. SSH host keys are remembered there; `just destroy` removes the old container's known-host entry. `--impure` is used only to read the project root and public key from the environment.
 
-The container's home persists across stops and updates, and is removed by `just destroy`. Log into `codex` and `claude` inside the container. Install project-specific toolchains by extending `environment.systemPackages` in this flake. `nix develop` and other commands that build inside the container are unavailable, because the container has no access to the host nix daemon. Enabling `extra.hostNixDaemon` would make the agent's user (UID 1000) a trusted nix user if that UID belongs to a host user in `nix.settings.trusted-users`, which gives the agent root-equivalent access to the host. See the Security section of the main README.
+The container's home persists across stops and updates, and is removed by `just destroy`. Log into `codex` and `claude` inside the container. Install project-specific toolchains by extending `environment.systemPackages`. See the Security section of the main README.
 
 The flake uses the Numtide binary cache used by the agent packages. Nix may ask whether to accept these cache settings on first use.
 
@@ -36,12 +36,13 @@ As configured, **sudo is not installed** and "user" is not in the sudoers group.
 
 ### Hardening
 
-Blocking the host Nix daemon socket prevents container processes from using a matching host UID to gain trusted Nix access, which is equivalent to host root when that host user is in `nix.settings.trusted-users` (for example, through `@wheel`). Setting `privateUsers` additionally remaps container UIDs/GIDs, including root, to a separate host ID range; this example currently leaves it unset, so container and host IDs still coincide and writable project mounts use the host user’s permissions.
+Blocking the host Nix daemon socket prevents container processes from using a matching host UID to gain trusted Nix access, which is equivalent to host root when that host user is in `nix.settings.trusted-users` (for example, through `@wheel`). Setting `privateUsers="pick"` additionally remaps container UIDs/GIDs, including root, to a separate host ID range; this example currently leaves it unset, so container and host IDs still coincide and writable project mounts use the host user’s permissions.
 
 ```
 extra.hostNixDaemon = false;
 extra.overlayStore.enable = true;
 extra.overlayStore.gcRoots.enable = true;
+# privateUsers = "pick"; # set to "pick" to isolate UID namespace (default: "no")
 ```
 
 ### Persistent home dir across destroy

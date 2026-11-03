@@ -76,9 +76,7 @@ class ReadmeTests(unittest.TestCase):
             self.assertEqual(path.read_text(), output)
 
     def test_checked_in_example_matches_readme(self):
-        subprocess.run(
-            [sys.executable, str(HERE / "readme.py"), "check-example"], check=True
-        )
+        subprocess.run([sys.executable, str(HERE / "readme.py"), "check-example"], check=True)
 
     def test_example_config_matches_prebuilt_container(self):
         example = (HERE.parent / "examples/readme/example.sh").read_text()
@@ -91,7 +89,7 @@ class ReadmeTests(unittest.TestCase):
             path.write_text("before\n## Example\n```bash\necho stale\n```\n## Other\nafter\n")
             command = [sys.executable, str(HERE / "readme.py")]
             check = command + ["check-example", "--readme", str(path)]
-            result = subprocess.run(check, text=True, capture_output=True)
+            result = subprocess.run(check, check=False, text=True, capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("update-example", result.stderr)
             self.assertIn("-echo stale", result.stderr)

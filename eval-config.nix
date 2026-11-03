@@ -408,6 +408,10 @@ let
                           depend on them. See `extra.overlayStore.gcRoots`.
 
                           Can't be combined with `extra.hostNixDaemon`.
+
+                          See the README section "Nix inside containers" for the
+                          consequences of enabling this option (unsandboxed builds, host
+                          nix settings and network not inherited, disk usage, host GC roots).
                         '';
                       };
                       gcRoots = {

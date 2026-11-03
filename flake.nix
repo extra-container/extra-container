@@ -1,7 +1,7 @@
 {
   description = "Run declarative NixOS containers without full system rebuilds";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   inputs.flake-utils.url = "github:numtide/flake-utils";
 
   outputs =
@@ -39,6 +39,7 @@
             addRunner ? true,
           }:
           let
+            extra-container = self.packages.${system}.default;
             containers = self.lib.evalContainers {
               inherit
                 system
@@ -56,12 +57,7 @@
                 + ''
                   install -D -m700 <(printf '${''
                     #!/usr/bin/env bash
-                    if ! type -p extra-container >/dev/null; then
-                      >&2 echo "Error: extra-container is not installed"
-                      >&2 echo "Docs: https://github.com/extra-container/extra-container?tab=readme-ov-file#install"
-                      exit 1
-                    fi
-                    EXTRA_CONTAINER_ETC=%s exec extra-container "$@"
+                    EXTRA_CONTAINER_ETC=%s exec ${extra-container}/bin/extra-container "$@"
                   ''}' "$out") $out/bin/container
                 '';
             });
@@ -99,19 +95,15 @@
       rec {
         packages.default = pkg pkgs;
 
-        # This dev shell allows running the `extra-container` command directly from the local
-        # source (./extra-container), for quick edit/test cycles.
-        # This only works when `nix develop` is started from the repo root directory.
+        # This dev shell provides the extra-container package built from this flake's source.
         devShells.default =
           let
             # Extra PATH, as defined in ./default.nix
-            path = lib.makeBinPath (
-              with pkgs;
-              [
-                openssh
-                e2fsprogs
-              ]
-            );
+            path = lib.makeBinPath [
+              pkgs.openssh
+              pkgs.e2fsprogs
+              self.packages.${system}.default
+            ];
           in
           pkgs.stdenv.mkDerivation {
             name = "shell";
@@ -122,9 +114,6 @@
 
             shellHook = ''
               PATH="${path}''${PATH:+:}$PATH"
-
-              # Enable calling the local source (./extra-container) with command `extra-container`
-              PATH="$(realpath .):$PATH"
 
               # Use the pinned nixpkgs for building containers when running `extra-container`
               export NIX_PATH="nixpkgs=${nixpkgs}''${NIX_PATH:+:}$NIX_PATH"

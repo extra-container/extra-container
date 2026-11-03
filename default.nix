@@ -8,9 +8,9 @@
   pkgSrc ? lib.cleanSource ./.,
 }:
 
-stdenv.mkDerivation rec {
+stdenv.mkDerivation {
   pname = "extra-container";
-  version = "0.17";
+  version = "1.0.1";
 
   src = pkgSrc;
 
