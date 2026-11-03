@@ -1,4 +1,3 @@
-
 sudo extra-container create --start <<'EOF'
 {
   containers.demo = {
