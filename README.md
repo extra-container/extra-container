@@ -72,20 +72,22 @@ extra-container shell -E "$cfg" --run c hostname # => hello
 
 #### With flakes (recommended)
 
-Add this repository as a flake input and import `extra-container.nixosModules.default`.
-This will install the `extra-container` binary.
+To install the `extra-container` binary, either
 
-Alternatively, add `extra-container.overlays.default` to `nixpkgs.overlays` and set
-`programs.extra-container.enable = true`.
+- Add this repository as a flake input, optionally pinning the release branch:
+  `inputs.extra-container.url = "github:extra-container/extra-container/release-1.0";`
+  and add `extra-container.nixosModules.default` to `imports`.
+  If you pin the release branch with the suffix `/release-1.0`, follow this repo to get
+  notified about new releases.
+
+or
+
+- add `extra-container.overlays.default` to `nixpkgs.overlays` and set
+  `programs.extra-container.enable = true`.
 
 #### With the nixpkgs module only
 
-Add `programs.extra-container.enable = true` to your configuration (NixOS ≥ 21.11).
-
-Note: the `extra-container` package in nixos-26.05 and nixos-unstable (as of 2026-10-15) still link to v0.14
-from the previous upstream repository. That version lacks the compatibility fixes from 0.15 and later
-and fails to evaluate containers against recent nixpkgs. Use the flake module or overlay
-above until nixpkgs is updated.
+Add `programs.extra-container.enable = true` to your configuration (NixOS ≥ 26.05).
 
 ### On other systemd-based Linux distros
 
@@ -219,27 +221,122 @@ or via stdin to access the working directory.
 extra-container create -E '{ imports = [ <pwd/myfile.nix> ]; ... }'
 ```
 
+### Nix inside containers
+
+By default, (since extra-container 1.0.0) nix commands that build or download (`nix build`,
+`nix run`, `nix develop`, `nix-shell`) don't work inside a container: the host nix daemon
+socket is masked for security (see [Security](#security)). Nix in the container can be
+enabled in one of two ways:
+
+- `extra.overlayStore.enable = true` (recommended): run a nix daemon inside the container
+  with a private, writable store layered over the host's store. The host is never modified.
+  The default `nix.settings.allowed-users = [ "*" ]` lets any user access the available daemon
+  for nix operations such as build. Adding a user to `nix.settings.trusted-users` grants
+  privileges effectively equivalent to root inside the container.
+  See [trusted-users](https://nix.dev/manual/nix/latest/command-ref/conf-file#conf-trusted-users)
+
+- `extra.hostNixDaemon = true`: the pre-1.0 behavior. Processes in the container talk to the
+  host nix daemon, with the same privileges as the host user of the same UID. Only use this
+  for containers whose users you trust with the host.
+
+The two options can't be combined.
+
+#### How the overlay store works
+
+At boot, the container mounts an OverlayFS on `/nix/store`: the host store is the read-only
+lower layer, and new store paths are written to an upper layer inside the container's root
+directory (`/var/lib/nixos-containers/<name>/nix/.overlay/upper`). The container runs its
+own nix daemon, configured with the experimental `local-overlay` store type, so it reuses
+every path that already exists in the host store and only builds or downloads what's missing.
+
+The upper layer persists across container restarts and is removed by `extra-container destroy`,
+together with the host GC roots described below. For ephemeral containers, it is removed when
+the container stops.
+
+#### Consequences of enabling the overlay store
+
+Read these before enabling the option for a container, and especially before enabling it
+for all containers.
+
+- **Experimental nix features are enabled in the container.** The container's `nix.conf`
+  enables `local-overlay-store` and `read-only-local-store`. The container's `nix.package`
+  must implement them: Nix 2.20 or later does, Lix doesn't (its store types are listed in the
+  [Lix manual](https://docs.lix.systems/manual/lix/stable/command-ref/new-cli/nix3-help-stores.html)).
+  With an unsupported nix, the container's daemon fails to start and nix commands fail;
+  the rest of the container works. As an experimental interface, the store type can change
+  between nix releases.
+- **Builds run without the nix sandbox.** The nix sandbox can't work in nspawn containers,
+  so the option sets `nix.settings.sandbox = false` in the container. Builders run as the
+  container's build users and can read world-readable files in the container and use its
+  network, and builds can be impure. With the host daemon, builds are sandboxed on the host.
+  The container is the isolation boundary: use `privateUsers` so that container users,
+  including the build users, are not host users.
+- **The host's nix configuration doesn't apply.** The container daemon reads the container's
+  `nix.conf` (`nix.settings` in the container config), not the host's. Substituters, trusted
+  public keys, `netrc-file`, `access-tokens` and other settings for private caches or
+  rate-limited APIs must be set in the container. Nix in the container used to inherit them
+  through the host daemon.
+- **Downloads use the container's network.** The host daemon downloaded on behalf of the
+  container, so a container with `privateNetwork` and no route to the internet could still
+  substitute. With the overlay store it can't: the container needs a working route (e.g. NAT
+  on the host).
+- **Disk usage.** Everything that is built or downloaded in the container is stored in its
+  upper layer, duplicated across containers and not shared with the host or deduplicated
+  against it. Garbage collection inside the container (`nix-collect-garbage`) only frees the
+  upper layer. The space is reclaimed by `extra-container destroy`.
+- **GC roots on the host.** The container's store depends on host store paths (e.g. a compiler
+  pulled in by `nix develop`) that only the container knows about. By default
+  (`extra.overlayStore.gcRoots.enable`), a timer in the container records them as host GC roots
+  in `/nix/var/nix/gcroots/per-container/<name>` every 5 minutes and when the container stops,
+  so the host retains more store paths while the container exists. A host garbage collection
+  that runs before a new dependency is rooted can break container store paths that depend on
+  it; destroy and recreate the container to repair it. If the container directory is removed by
+  other means than `extra-container destroy`, the roots stay behind and must be removed by hand.
+- **More moving parts.** The container runs additional units: the overlay mount, a nix daemon
+  (as container root), and the GC root timer. Boot is slightly slower, and a container that
+  doesn't use nix gains nothing from them.
+- **Kernel requirements.** Mounting an overlay inside a user namespace (`privateUsers`) requires
+  the `userxattr` mount option, available since Linux 5.11. The kernel limits overlay stacking
+  to two levels: if the host's `/nix/store` is itself an overlay on top of another overlay, the
+  container's mount fails.
+- **Root in the container can unmount the overlay.** This only exposes the read-only host
+  store, which the container has anyway; it can't be used to reach the host daemon, whose
+  socket is masked by a mount that the container can't undo.
+
+Use `extra.overlayStore.gcRoots.enable = false` for short-lived containers that are destroyed
+before the host runs garbage collection.
+
 ## Security
 
 extra-container containers are NixOS containers (systemd-nspawn). Review these points
-before running partially-trusted code in a container.
+before running untrusted code in a container.
 
-- **Host nix daemon**: masked by default. With `extra.hostNixDaemon = true`, processes in
-  the container can use the host nix daemon (`nix build`, `nix develop`, ...). The daemon
-  identifies clients by host UID, so a container user whose UID belongs to a host user in
-  `nix.settings.trusted-users` (e.g. `@wheel`) is a trusted nix user, which is equivalent
-  to root on the host.
+- **Host nix daemon**: Since extra-container 1.0.0, `extra.hostNixDaemon` defaults to false,
+  blocking the host daemon socket from container processes. With `extra.hostNixDaemon = true`,
+  processes in the container can use the host nix daemon (`nix build`, `nix develop`, ...)
+  and *modify the host store* through the host daemon.
+  The daemon identifies clients by host UID, so a container user whose UID belongs to a
+  host user in `nix.settings.trusted-users` (e.g. `@wheel`) is a trusted nix user, which
+  is equivalent to root on the host. Set `privateUsers = "pick"` to isolate the container UID
+  namespace from host UIDs.
 - **Nix inside containers**: `extra.overlayStore.enable = true` runs a nix daemon in the
   container with a private store layered over the host store, so builds work without the
   host daemon and without modifying the host store. Builds run without the nix sandbox,
-  which doesn't work in nspawn containers. See the option descriptions in
-  [eval-config.nix](./eval-config.nix).
+  which doesn't work in nspawn containers. See [Nix inside containers](#nix-inside-containers)
+  for the consequences.
+  To deny daemon access to all untrusted users, set `nix.settings.allowed-users = []` inside
+  the container configuration. Trusted users can always connect.
 - **UIDs are shared with the host** unless the container sets `privateUsers`. Container
   UID 1000 is host UID 1000 for file access through bind mounts and for the nix daemon.
 - **Root in a container is not isolated from the host** unless the container sets
   `privateUsers`. Don't give container root to untrusted code.
 - **Network**: without `privateNetwork` (or `extra.addressPrefix`), the container shares
   the host's network, including services listening on the host's localhost.
+- **Host files**: any file or directory mounted in the container with `bindMounts` is
+  accessible within the container. The host's `/nix/store` is also accessible. With
+  `extra.hostNixDaemon = true`, container users can modify the host store through the host
+  daemon. Any secrets in the host nix store are readable in the container, even if the files
+  aren't referenced by the container's closure.
 
 To report a vulnerability, see [SECURITY.md](./SECURITY.md).
 
@@ -423,7 +520,12 @@ The following tests are executed:
   the main test script [`test.sh`](./test.sh) is run.\
   `test.sh` adds and removes temporary containers named `test-*` on the host system.
   It can also be called directly, but wrapping it with `run-tests-in-container.sh`
-  helps reducing interference with your main system.
+  helps reducing interference with your main system.\
+  By default, the test container builds the nested containers through the host nix
+  daemon (`extra.hostNixDaemon`). `run-tests-in-container.sh --overlay` (or
+  `just runTestsOverlay`) uses the container's own nix daemon on an overlay store
+  (`extra.overlayStore`) instead, which checks nested containers over an overlay store
+  on a real kernel; the VM test can't cover that. `just runTestsAll` runs both.
 
 - VM test
 

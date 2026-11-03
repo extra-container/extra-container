@@ -6,6 +6,18 @@ shopt -s nullglob
 scriptDir="$(dirname "$(readlink -f "$0")")"
 PATH=$scriptDir:$PATH
 
+# The test container needs nix to build the nested test containers. By default it
+# uses the host nix daemon (fast, shares the host's store and substituter config).
+# With --overlay, it runs its own daemon on an overlay store instead, which
+# exercises nested containers over an overlay store on a real host kernel.
+nixAccess='extra.hostNixDaemon = true;'
+for arg in "$@"; do
+    case $arg in
+        --overlay) nixAccess='extra.overlayStore.enable = true;' ;;
+        *) echo "Usage: $0 [--overlay]" >&2; exit 1 ;;
+    esac
+done
+
 # Namespace entry and cleanup need root, not just extra-container commands.
 if ((EUID != 0)); then
     exec sudo env PATH="$PATH" NIX_PATH="${NIX_PATH-}" bash "$scriptDir/run-tests-in-container.sh" "$@"
@@ -37,6 +49,7 @@ extra-container create -s <<EOF
     additionalCapabilities = [ "CAP_LINUX_IMMUTABLE" ];
     bindMounts."/extra-container".hostPath = "$scriptDir";
     bindMounts."/nixpkgs".hostPath = "$nixpkgs";
+    $nixAccess
     config = { options, ... }: {
       environment = {
         systemPackages = [ pkgs.nixos-container pkgs.e2fsprogs ];
@@ -50,6 +63,6 @@ extra-container create -s <<EOF
 }
 EOF
 
-echo "Running tests"
+echo "Running tests ($nixAccess)"
 echo
 nixos-container run test-extra-container -- '/extra-container/test.sh'

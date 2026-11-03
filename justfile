@@ -11,8 +11,16 @@ test: testUtilities runTests checkFlake
 testUtilities:
     python3 -B util/test_utilities.py
 
+# Main test suite; the test container uses the host nix daemon
 runTests:
     nix shell -c sudo ./run-tests-in-container.sh
+
+# Main test suite; the test container uses its own nix daemon on an overlay store
+runTestsOverlay:
+    nix shell -c sudo ./run-tests-in-container.sh --overlay
+
+# Main test suite with both nix access variants
+runTestsAll: runTests runTestsOverlay
 
 checkFlake:
     nix flake check
